@@ -30,6 +30,25 @@ export interface ApertureFontOption {
   fontFamily: string;
 }
 
+export interface ThemeSettings {
+  selectedFontId: ApertureFontId;
+  fontSize: number;
+  outerFontId: ApertureFontId;
+  outerFontSize: number;
+  showSeconds: boolean;
+  showRelativeMinuteLabels: boolean;
+  showXRay: boolean;
+}
+
+export interface WatchVariationInfo {
+  id: ThemeFinish;
+  name: string;
+  tag: string;
+  desc: string;
+  accent: string;
+  defaultSettings: ThemeSettings;
+}
+
 export interface TimeState {
   hours: number;       // 0 - 23 (24-hour format)
   minutes: number;     // 0 - 59

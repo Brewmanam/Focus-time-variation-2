@@ -6,28 +6,85 @@ import { ExplodedLayersView } from './components/ExplodedLayersView';
 import { MechanismDiagram } from './components/MechanismDiagram';
 import { Controls } from './components/Controls';
 import { TimezoneSelector } from './components/TimezoneSelector';
-import { TimeState, ThemeFinish, DisplayView, PresetTime, CityTimezone, ApertureFontId } from './types';
+import { TimeState, ThemeFinish, DisplayView, PresetTime, CityTimezone, ApertureFontId, ThemeSettings } from './types';
 import { audio } from './utils/audio';
 import { CITIES, getTimeInTimezone, detectLocationFromIP, getUtcOffsetString } from './data/timezones';
-import { Clock, Compass, Layers, RotateCcw, ShieldCheck, Sparkles, MapPin, ChevronDown, Check, Palette } from 'lucide-react';
+import { 
+  WATCH_VARIATIONS, 
+  DEFAULT_THEME_PROFILES, 
+  loadSavedThemeProfiles, 
+  saveThemeProfilesToStorage, 
+  loadSavedActiveTheme, 
+  saveActiveThemeToStorage 
+} from './data/themes';
+import { Clock, Compass, Layers, RotateCcw, ShieldCheck, Sparkles, MapPin, ChevronDown, Check, Palette, Undo2 } from 'lucide-react';
 
 export default function App() {
   const [isLive, setIsLive] = useState<boolean>(true);
   const [view, setView] = useState<DisplayView>('dial');
-  const [finish, setFinish] = useState<ThemeFinish>('obsidian_gold');
   const [speed, setSpeed] = useState<number>(1);
-  const [showSeconds, setShowSeconds] = useState<boolean>(true);
-  const [showRelativeMinuteLabels, setShowRelativeMinuteLabels] = useState<boolean>(true);
-  const [showXRay, setShowXRay] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  // Aperture Typography Study State
-  const [selectedFontId, setSelectedFontId] = useState<ApertureFontId>('cinzel');
-  const [fontSize, setFontSize] = useState<number>(24);
+  // Active theme and per-variation saved settings
+  const [themeProfiles, setThemeProfiles] = useState<Record<ThemeFinish, ThemeSettings>>(() => loadSavedThemeProfiles());
+  const [finish, setFinishState] = useState<ThemeFinish>(() => loadSavedActiveTheme());
+  const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Outer Edge Ring Typography Study State
-  const [outerFontId, setOuterFontId] = useState<ApertureFontId>('space');
-  const [outerFontSize, setOuterFontSize] = useState<number>(11);
+  // Current active theme settings
+  const currentThemeSettings = themeProfiles[finish] || DEFAULT_THEME_PROFILES[finish];
+  const selectedFontId = currentThemeSettings.selectedFontId;
+  const fontSize = currentThemeSettings.fontSize;
+  const outerFontId = currentThemeSettings.outerFontId;
+  const outerFontSize = currentThemeSettings.outerFontSize;
+  const showSeconds = currentThemeSettings.showSeconds;
+  const showRelativeMinuteLabels = currentThemeSettings.showRelativeMinuteLabels;
+  const showXRay = currentThemeSettings.showXRay;
+
+  // Auto-saving update handler for any setting on the active theme
+  const updateCurrentThemeSetting = useCallback((partial: Partial<ThemeSettings>) => {
+    setThemeProfiles((prevProfiles) => {
+      const activeProfile = prevProfiles[finish] || DEFAULT_THEME_PROFILES[finish];
+      const updatedProfile = { ...activeProfile, ...partial };
+      const updatedProfiles = {
+        ...prevProfiles,
+        [finish]: updatedProfile,
+      };
+      saveThemeProfilesToStorage(updatedProfiles);
+      return updatedProfiles;
+    });
+
+    const variationName = WATCH_VARIATIONS.find(v => v.id === finish)?.name || 'Theme';
+    setSaveToast(`Auto-saved as default for ${variationName}`);
+  }, [finish]);
+
+  // Set active variation finish & persist
+  const setFinish = useCallback((newFinish: ThemeFinish) => {
+    setFinishState(newFinish);
+    saveActiveThemeToStorage(newFinish);
+  }, []);
+
+  // Reset a specific theme to factory defaults
+  const resetThemeToDefaults = useCallback((themeId: ThemeFinish, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setThemeProfiles((prevProfiles) => {
+      const updatedProfiles = {
+        ...prevProfiles,
+        [themeId]: { ...DEFAULT_THEME_PROFILES[themeId] },
+      };
+      saveThemeProfilesToStorage(updatedProfiles);
+      return updatedProfiles;
+    });
+    const variationName = WATCH_VARIATIONS.find(v => v.id === themeId)?.name || 'Theme';
+    setSaveToast(`Reset ${variationName} to default`);
+  }, []);
+
+  // Auto-dismiss save toast
+  useEffect(() => {
+    if (saveToast) {
+      const timer = setTimeout(() => setSaveToast(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [saveToast]);
 
   // Timezone & Location state
   const initialLocalTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
@@ -60,49 +117,6 @@ export default function App() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isVariationMenuOpen]);
-
-  const WATCH_VARIATIONS: { id: ThemeFinish; name: string; tag: string; desc: string; accent: string; fontId: ApertureFontId }[] = [
-    {
-      id: 'obsidian_gold',
-      name: 'Obsidian & 18K Gold',
-      tag: 'CLASSIC HOROLOGY',
-      desc: 'Sunray brushed radial dial with polished 18K gold bezel, gold minute needle & day/night disc.',
-      accent: '#d4af37',
-      fontId: 'cinzel'
-    },
-    {
-      id: 'titanium_stealth',
-      name: 'Industrial Skeleton / Titanium',
-      tag: 'X-RAY MECHANICAL',
-      desc: 'Satin brushed aerospace titanium with electric blue accents and high-visibility luminescence.',
-      accent: '#38bdf8',
-      fontId: 'space'
-    },
-    {
-      id: 'classic_slate',
-      name: 'Bauhaus Minimalist',
-      tag: 'MODERNIST CONTRAST',
-      desc: 'High-contrast monochrome slate and crisp white finish with red Bauhaus second hand.',
-      accent: '#ef4444',
-      fontId: 'syne'
-    },
-    {
-      id: 'midnight_astral',
-      name: 'Celestial Galaxy / Astral',
-      tag: 'ASTRONOMICAL HORIZON',
-      desc: 'Deep cosmic indigo & cyan gradient dial reflecting midnight starlight and lunar phase transitions.',
-      accent: '#818cf8',
-      fontId: 'orbitron'
-    },
-    {
-      id: 'vintage_ivory',
-      name: 'Vintage Ivory & Blued Steel',
-      tag: 'HERITAGE CHRONOMETER',
-      desc: 'Warm enamel porcelain ivory dial with heat-blued steel hands and Parisian typography.',
-      accent: '#1e3a8a',
-      fontId: 'bodoni'
-    }
-  ];
 
   // User manual city selection ref to prevent IP detection race conditions
   const hasUserSelectedCityRef = useRef<boolean>(false);
@@ -310,6 +324,14 @@ export default function App() {
       {/* Subtle ambient lighting */}
       <div className="fixed inset-0 pointer-events-none opacity-40 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(245,158,11,0.15),rgba(0,0,0,0))]" />
 
+      {/* Floating Auto-Save Reassurance Toast */}
+      {saveToast && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center space-x-2 px-3 py-1.5 rounded-full bg-neutral-900/95 border border-amber-500/60 shadow-xl text-xs font-mono-code text-amber-300 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+          <span>{saveToast}</span>
+        </div>
+      )}
+
       {/* Floating Minimal HUD: City & Timezone Bar + Live/Recalibrate Pill */}
       <header className="w-full max-w-7xl mx-auto flex items-center justify-between gap-2 z-30 flex-shrink-0 px-2 py-1 relative">
         {/* Interactive Focus Time Header & Variations Picker */}
@@ -317,7 +339,7 @@ export default function App() {
           <button
             onClick={() => setIsVariationMenuOpen(!isVariationMenuOpen)}
             className="flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-850 border border-neutral-800 hover:border-amber-500/50 text-neutral-100 transition-all cursor-pointer shadow-sm group select-none text-left"
-            title="Click to explore and switch watch variations"
+            title="Click to explore, customize and switch watch variations"
           >
             <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 group-hover:scale-105 transition-transform">
               <Clock className="w-4 h-4" />
@@ -343,28 +365,38 @@ export default function App() {
 
           {/* Variations Dropdown Popover */}
           {isVariationMenuOpen && (
-            <div className="absolute top-full left-0 mt-2 w-[310px] sm:w-[360px] p-2.5 rounded-2xl bg-neutral-900/95 border border-neutral-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute top-full left-0 mt-2 w-[320px] sm:w-[380px] p-2.5 rounded-2xl bg-neutral-900/95 border border-neutral-700 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between px-2 pb-2 mb-1.5 border-b border-neutral-800">
                 <div className="flex items-center space-x-1.5 text-xs font-space font-bold text-neutral-200 uppercase tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>Choose Watch Variation</span>
                 </div>
-                <span className="text-[10px] font-mono-code text-neutral-400">5 Editions</span>
+                <span className="text-[10px] font-mono-code text-neutral-400">Settings Auto-Persisted</span>
               </div>
 
-              <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
                 {WATCH_VARIATIONS.map((v) => {
                   const isSelected = finish === v.id;
+                  const profile = themeProfiles[v.id] || DEFAULT_THEME_PROFILES[v.id];
+                  const defaultProfile = DEFAULT_THEME_PROFILES[v.id];
+                  const isCustomized = 
+                    profile.selectedFontId !== defaultProfile.selectedFontId ||
+                    profile.fontSize !== defaultProfile.fontSize ||
+                    profile.outerFontId !== defaultProfile.outerFontId ||
+                    profile.outerFontSize !== defaultProfile.outerFontSize ||
+                    profile.showSeconds !== defaultProfile.showSeconds ||
+                    profile.showRelativeMinuteLabels !== defaultProfile.showRelativeMinuteLabels ||
+                    profile.showXRay !== defaultProfile.showXRay;
+
                   return (
-                    <button
+                    <div
                       key={v.id}
                       onClick={() => {
                         setFinish(v.id);
-                        setSelectedFontId(v.fontId);
                         setIsVariationMenuOpen(false);
                         audio.playJumpHour();
                       }}
-                      className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-start space-x-3 ${
+                      className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-start space-x-3 group relative ${
                         isSelected
                           ? 'bg-neutral-800 border border-amber-500/80 shadow-md ring-1 ring-amber-500/20'
                           : 'bg-neutral-950/60 border border-neutral-800/80 hover:bg-neutral-800/60 hover:border-neutral-700'
@@ -382,19 +414,46 @@ export default function App() {
                           <span className={`text-xs font-space font-bold ${isSelected ? 'text-amber-300' : 'text-neutral-100'}`}>
                             {v.name}
                           </span>
-                          <span className="text-[9px] font-mono-code px-1.5 py-0.2 rounded bg-neutral-900 text-neutral-400 border border-neutral-800 font-semibold uppercase">
-                            {v.tag}
-                          </span>
+                          <div className="flex items-center space-x-1">
+                            {isCustomized && (
+                              <span className="text-[8px] font-mono-code px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase font-medium">
+                                Custom
+                              </span>
+                            )}
+                            <span className="text-[9px] font-mono-code px-1.5 py-0.2 rounded bg-neutral-900 text-neutral-400 border border-neutral-800 font-semibold uppercase">
+                              {v.tag}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-[11px] text-neutral-400 font-sans mt-0.5 line-clamp-2 leading-relaxed">
                           {v.desc}
                         </p>
+
+                        {/* Stored Font & Size Specs Badge */}
+                        <div className="flex items-center space-x-2 mt-1.5 text-[10px] font-mono-code text-neutral-400">
+                          <span className="text-neutral-300 capitalize">{profile.selectedFontId}</span>
+                          <span className="text-neutral-600">•</span>
+                          <span>{profile.fontSize}px</span>
+                          <span className="text-neutral-600">•</span>
+                          <span className="text-neutral-400 capitalize">Ring: {profile.outerFontId}</span>
+                        </div>
                       </div>
 
-                      {isSelected && (
-                        <Check className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                      )}
-                    </button>
+                      <div className="flex items-center space-x-1.5 flex-shrink-0 mt-0.5">
+                        {isCustomized && (
+                          <button
+                            onClick={(e) => resetThemeToDefaults(v.id, e)}
+                            title="Reset this variation to factory default"
+                            className="p-1 rounded-md bg-neutral-900 hover:bg-neutral-700 text-neutral-400 hover:text-amber-300 border border-neutral-700 transition-colors"
+                          >
+                            <Undo2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-amber-400" />
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -436,9 +495,9 @@ export default function App() {
             <div className="w-full sm:w-auto max-w-sm lg:max-w-none flex justify-center order-2 lg:order-1 flex-shrink-0 z-20">
               <ApertureTypographyPanel
                 selectedFontId={selectedFontId}
-                onSelectFontId={setSelectedFontId}
+                onSelectFontId={(fId) => updateCurrentThemeSetting({ selectedFontId: fId })}
                 fontSize={fontSize}
-                onSelectFontSize={setFontSize}
+                onSelectFontSize={(size) => updateCurrentThemeSetting({ fontSize: size })}
               />
             </div>
 
@@ -463,9 +522,9 @@ export default function App() {
             <div className="w-full sm:w-auto max-w-sm lg:max-w-none flex justify-center order-3 lg:order-3 flex-shrink-0 z-20">
               <OuterRingTypographyPanel
                 outerFontId={outerFontId}
-                onSelectOuterFontId={setOuterFontId}
+                onSelectOuterFontId={(fId) => updateCurrentThemeSetting({ outerFontId: fId })}
                 outerFontSize={outerFontSize}
-                onSelectOuterFontSize={setOuterFontSize}
+                onSelectOuterFontSize={(size) => updateCurrentThemeSetting({ outerFontSize: size })}
               />
             </div>
           </div>
@@ -475,13 +534,13 @@ export default function App() {
           <div className="w-full flex flex-col items-center space-y-4 max-h-full overflow-y-auto">
             <TypographyInspector
               selectedFontId={selectedFontId}
-              onSelectFontId={setSelectedFontId}
+              onSelectFontId={(fId) => updateCurrentThemeSetting({ selectedFontId: fId })}
               fontSize={fontSize}
-              onSelectFontSize={setFontSize}
+              onSelectFontSize={(size) => updateCurrentThemeSetting({ fontSize: size })}
               outerFontId={outerFontId}
-              onSelectOuterFontId={setOuterFontId}
+              onSelectOuterFontId={(fId) => updateCurrentThemeSetting({ outerFontId: fId })}
               outerFontSize={outerFontSize}
-              onSelectOuterFontSize={setOuterFontSize}
+              onSelectOuterFontSize={(size) => updateCurrentThemeSetting({ outerFontSize: size })}
             />
             <ExplodedLayersView
               timeState={timeState}
