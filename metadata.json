@@ -1,0 +1,6 @@
+{
+  "name": "Focus Time",
+  "description": "An interactive horological timepiece display featuring a 1/12th jumping aperture disc, concentric 24-hour day/night celestial indicator, revealed hour numeral, and relative 360-degree minute horizon hand.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
